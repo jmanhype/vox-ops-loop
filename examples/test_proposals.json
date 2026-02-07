@@ -1,0 +1,91 @@
+[
+  {
+    "description": "Simple no-op proposal (auto-approved)",
+    "source": "manual_test",
+    "template": {
+      "title": "Test no-op execution",
+      "risk_level": "low",
+      "steps": [
+        {
+          "kind": "noop",
+          "executor": "noop",
+          "params": {
+            "note": "This is a test step that always succeeds"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "description": "Multi-step proposal with OpenClaw agent",
+    "source": "manual_test",
+    "template": {
+      "title": "Run analysis agent",
+      "risk_level": "low",
+      "steps": [
+        {
+          "kind": "openclaw",
+          "executor": "openclaw",
+          "params": {
+            "subcommand": "agent",
+            "agent": "main",
+            "prompt": "Say hello from the ops loop!",
+            "thinking": "low"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "description": "Proposal that will fail (for testing dead letters)",
+    "source": "manual_test",
+    "template": {
+      "title": "Test failure handling",
+      "risk_level": "low",
+      "steps": [
+        {
+          "kind": "invalid_step",
+          "executor": "openclaw",
+          "params": {
+            "force_failure": true
+          },
+          "max_retries": 2
+        }
+      ]
+    }
+  },
+  {
+    "description": "Complex multi-step mission",
+    "source": "manual_test",
+    "template": {
+      "title": "Full workflow test",
+      "risk_level": "medium",
+      "steps": [
+        {
+          "kind": "noop",
+          "executor": "noop",
+          "params": {
+            "note": "Step 1: Initialize"
+          }
+        },
+        {
+          "kind": "openclaw",
+          "executor": "openclaw",
+          "params": {
+            "subcommand": "agent",
+            "agent": "main",
+            "prompt": "What time is it?",
+            "thinking": "low"
+          }
+        },
+        {
+          "kind": "noop",
+          "executor": "noop",
+          "params": {
+            "note": "Step 3: Cleanup"
+          }
+        }
+      ]
+    }
+  }
+]

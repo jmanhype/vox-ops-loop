@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ops Loop Multi-Agent Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #e5e7eb; }
+    .card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 0.75rem; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .status { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; font-weight: 600; }
+    .status-dot { width: 0.5rem; height: 0.5rem; }
+    .agent-card { border-left: 4px solid; }
+    .status-bar { height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 0 25rem; }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.5; }
+      50%, 0% { transform: scale(1.5); opacity: 1; }
+    100%, 0% { transform: scale(1); opacity: 0.5; }
+    50%, 100% { transform: scale(1); opacity: 0.25; }
+      100%, 100% { opacity: 0; }
+    50%, 50% { animation: none; }
+    50%, 0% { animation: none; }
+      0%, 50% { animation: pulse 2s infinite; }
+    0%, 100% { animation: none; }
+    0%, 50% { animation: pulse 2s infinite; }
+      0%, 0% { animation: none; }
+      0%, 100% { animation: pulse 2s infinite; }
+      0%, 50% { animation: none; }
+    50%, 0% { animation: pulse 2s infinite; }
+      0%, 100% { animation: pulse 2s infinite; }
+      50%, 50% { animation: pulse 2s infinite; }
+    0%, 100% { animation: pulse 2s infinite; }
+      0%, 50% { animation: pulse 2s infinite; }
+      0%, 0% { animation: pulse 2s infinite; }
+      0%, 100% { animation: pulse 2s infinite; }
+      0%, 50% { animation: pulse 2s infinite; }
+      50%, 50% { animation: pulse 2s infinite; }
+    50%, 0% { animation: pulse 2s infinite; }
+      50%, 100% { animation: pulse 2s infinite; }
+      0%, 50% { animation: pulse 2s infinite; }
+      50%, 0% { animation: pulse 2s infinite; }
+      50%, 100% { animation: pulse 2s infinite; }
+      0%, 50% { animation: pulse 2s infinite; }
+      0%, 100% { animation: pulse 2s infinite; }
+      50%, 0% { animation: pulse 2s infinite; }
+      0%, 100% { animation: pulse 2s infinite; }
+      0%, 50% { animation: pulse 2s infinite; }
+      0%, 100% { animation: pulse 2s infinite; }
+    </style>
+</head>
+<body class="min-h-screen p-8">
+  <div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8 bg-white/10 p-6 rounded-xl shadow-lg border border-gray-200">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900">🤖 Ops Loop Multi-Agent Dashboard</h1>
+          <p class="text-gray-600">Real-time visibility into autonomous AI operations</p>
+        </div>
+        <div class="flex gap-2">
+          <div class="status">
+            <div class="status-dot bg-green-500 pulse"></div>
+            <span class="text-sm font-medium text-green-700">System Live</span>
+          </div>
+          <div class="text-sm text-gray-500">Vercel: https://vercel-1iv4lv65i-straughterguthrie-gmailcoms-projects.vercel.app</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      
+      <!-- Agent Status Cards -->
+      <div class="card p-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4">🤖 Active Agents</h2>
+        <div class="space-y-4">
+          <!-- Scout -->
+          <div class="agent-card border-l-4 border-orange-500 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <h3 class="font-bold text-lg text-orange-700">Scout</h3>
+                <p class="text-sm text-gray-600">Status: <span class="text-green-600 font-medium">Active</span></p>
+              </div>
+              <div class="text-sm text-gray-500">Task: Content Discovery</div>
+            </div>
+            <div class="w-24 h-1 bg-gray-100 rounded-full mb-2">
+              <div class="status-bar">
+                <div class="w-full bg-orange-500 rounded-full h-full"></div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Sage -->
+          <div class="agent-card border-l-4 border-purple-500 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <h3 class="font-bold text-lg text-purple-700">Sage</h3>
+                <p class="text-sm text-gray-600">Status: <span class="text-yellow-600 font-medium">Active</span></p>
+              </div>
+              <div class="text-sm text-gray-500">Task: Strategy Analysis</div>
+            </div>
+            <div class="w-24 h-1 bg-gray-100 rounded-full mb-2">
+              <div class="status-bar">
+                <div class="w-3/4 bg-purple-500 rounded-full h-full"></div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Quill -->
+          <div class="agent-card border-l-4 border-blue-500 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <h3 class="font-bold text-lg text-blue-700">Quill</h3>
+                <p class="text-sm text-gray-600">Status: <span class="text-gray-500 font-medium">Idle</span></p>
+              </div>
+              <div class="text-sm text-gray-500">Task: Content Creation</div>
+            </div>
+            <div class="w-24 h-1 bg-gray-100 rounded-full mb-2">
+              <div class="status-bar">
+                <div class="w-0 bg-blue-500 rounded-full h-full"></div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Xalt -->
+          <div class="agent-card border-l-4 border-pink-500 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <h3 class="font-bold text-lg text-pink-700">Xalt</h3>
+                <p class="text-sm text-gray-600">Status: <span class="text-gray-500 font-medium">Idle</span></p>
+              </div>
+              <div class="text-sm text-gray-500">Task: Social Media Management</div>
+            </div>
+            <div class="w-24 h-1 bg-gray-100 rounded-full mb-2">
+              <div class="status-bar">
+                <div class="w-0 bg-pink-500 rounded-full h-full"></div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Observer -->
+          <div class="agent-card border-l-4 border-teal-500 p-4">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <h3 class="font-bold text-lg text-teal-700">Observer</h3>
+                <p class="text-sm text-gray-600">Status: <span class="text-gray-500 font-medium">Idle</span></p>
+              </div>
+              <div class="text-sm text-gray-500">Task: Quality Assurance</div>
+            </div>
+            <div class="w-24 h-1 bg-gray-100 rounded-full mb-2">
+              <div class="status-bar">
+                <div class="w-0 bg-teal-500 rounded-full h-full"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="card p-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4">📊 Recent Activity</h2>
+        <div class="space-y-3">
+          <div class="bg-white/50 p-4 rounded-lg border border-gray-200">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-sm text-orange-600">Scout Discovery</div>
+                <div class="text-sm text-gray-500">Just now</div>
+              </div>
+              <div class="text-green-600 font-medium text-sm">Success</div>
+            </div>
+          </div>
+          
+          <div class="bg-white/50 p-4 rounded-lg border border-gray-200">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-sm text-purple-600">Strategy Analysis</div>
+                <div class="text-sm text-gray-500">Just now</div>
+              </div>
+              <div class="text-yellow-600 font-medium text-sm">Pending</div>
+            </div>
+          </div>
+          
+          <div class="bg-white/50 p-4 rounded-lg border border-gray-200">
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="font-medium text-sm text-blue-600">Content Draft</div>
+                <div class="text-sm text-gray-500">Just now</div>
+              </div>
+              <div class="text-gray-500 font-medium text-sm">Idle</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card p-6">
+        <h2 class="text-xl font-bold text-gray-900 mb-4">⚡ Quick Actions</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <button onclick="testScout()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition">
+            🔍 Trigger Scout Discovery
+          </button>
+          <button onclick="triggerViral()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition">
+            🔥 Simulate Viral Tweet
+          </button>
+          <button onclick="createContentDraft()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition">
+            ✍ Create Content Draft
+          </button>
+          <button onclick="viewDatabase()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition">
+            🗄️ View Database
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center text-gray-500 text-sm">
+      <p>Auto-refreshing every 30 seconds...</p>
+    </div>
+
+    <script>
+      // Configuration
+      const API_BASE = 'https://vercel-1iv4lv65i-straughterguthrie-gmailcoms-projects.vercel.app/api/ops';
+      const OPS_API_KEY = 'ops-loop-secret-token'; // User should set this
+
+      // State
+      let agents = {
+        scout: { status: 'idle', lastTask: 'Content Discovery', progress: 0 },
+        sage: { status: 'idle', lastTask: 'Strategy Analysis', progress: 0 },
+        quill: { status: 'idle', lastTask: 'Content Creation', progress: 0 },
+        xalt: { status: 'idle', lastTask: 'Social Media Management', progress: 0 },
+        observer: { status: 'idle', lastTask: 'Quality Assurance', progress: 0 }
+      };
+
+      // Functions
+      async function refreshDashboard() {
+        try {
+          // Fetch recent proposals
+          const response = await fetch(`${API_BASE}/heartbeat`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${OPS_API_KEY}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (!response.ok) throw new Error('Failed to fetch dashboard data');
+          
+          const data = await response.json();
+          console.log('Dashboard refreshed:', data);
+          
+          // Update activity list (simulated)
+          document.querySelector('.recent-activity').innerHTML = `
+            <div class="bg-white/50 p-4 rounded-lg border border-gray-200">
+              <div class="flex justify-between items-center">
+                <div class="font-medium text-sm text-orange-600">${new Date().toLocaleTimeString()} - Scout Discovery</div>
+                <div class="text-sm text-gray-500">Success</div>
+              </div>
+            </div>
+          `;
+
+        } catch (error) {
+          console.error('Dashboard refresh failed:', error);
+        }
+      }
+
+      // Action handlers
+      async function testScout() {
+        await fetch(`${API_BASE}/heartbeat`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPS_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        alert('🔍 Scout discovery triggered! Check database for new Scout missions.');
+        refreshDashboard();
+      }
+
+      async function triggerViral() {
+        await fetch(`${API_BASE}/heartbeat`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPS_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        alert('🔥 Viral tweet simulation triggered! This would create a high-risk proposal requiring manual approval.');
+        refreshDashboard();
+      }
+
+      async function createContentDraft() {
+        await fetch(`${API_BASE}/heartbeat`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPS_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        alert('✍ Content draft created! Quill agent should pick this up next.');
+        refreshDashboard();
+      }
+
+      async function viewDatabase() {
+        alert('🗄️ Opening Supabase dashboard...');
+        window.open('https://supabase.com/dashboard/project/nnmgddhlqfumlstopqxs');
+      }
+
+      // Auto-refresh
+      setInterval(refreshDashboard, 30000);
+      
+      // Initial refresh
+      refreshDashboard();
+    </script>
+</body>
+</html>

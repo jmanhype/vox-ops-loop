@@ -1,0 +1,15 @@
+{
+  "name": "ops-loop-local",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "heartbeat": "node src/heartbeat.mjs",
+    "worker": "node src/worker.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "dotenv": "^17.2.4",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.18.0"
+  }
+}
