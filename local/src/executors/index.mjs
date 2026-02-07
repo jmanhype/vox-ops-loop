@@ -2,9 +2,14 @@ import { runWreckit } from './wreckit.mjs';
 import { runOpenClaw } from './openclaw.mjs';
 import { runRadar } from './radar.mjs';
 import { runMinion } from './minion.mjs';
+import { runVote } from './vote.mjs';
 
 export async function executeStep(step) {
   const executor = step.executor || 'openclaw';
+
+  if (step.kind === 'vote' || executor === 'vote') {
+    return await runVote(step);
+  }
 
   if (step.kind === 'minion' || step.kind === 'minion_request') {
     return await runMinion(step);
