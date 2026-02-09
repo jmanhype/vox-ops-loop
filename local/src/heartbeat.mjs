@@ -1,239 +1,198 @@
+
 import 'dotenv/config';
 import { getSupabaseAdmin, getPolicyValue } from './supabase.mjs';
 
-function normalizeArray(value) {
-  if (!Array.isArray(value)) return [];
-  return value;
-}
+const supabase = getSupabaseAdmin();
 
-function matchesPattern(event, pattern) {
-  const eventType = event.type;
-  const patternType = pattern.event_type ?? pattern.type ?? '*';
-  const typeMatch = Array.isArray(patternType)
-    ? patternType.includes(eventType)
-    : patternType === '*' || patternType === eventType;
-
-  if (!typeMatch) return false;
-
-  const requiredTags = normalizeArray(pattern.tags);
-  if (requiredTags.length > 0) {
-    const eventTags = normalizeArray(event.data?.tags);
-    const hasAll = requiredTags.every(tag => eventTags.includes(tag));
-    if (!hasAll) return false;
-  }
-
-  if (pattern.source) {
-    if (event.data?.source !== pattern.source) return false;
-  }
-
-  return true;
-}
-
-async function cooldownActive(supabase, pattern) {
-  if (!pattern?.id || !pattern?.cooldown_minutes) return false;
-  const cutoff = new Date(Date.now() - Number(pattern.cooldown_minutes) * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from('ops_agent_reactions')
-    .select('id')
-    .filter('payload->>pattern_id', 'eq', String(pattern.id))
-    .gt('created_at', cutoff)
-    .limit(1);
-
-  if (error) throw error;
-  return (data?.length || 0) > 0;
-}
-
-function passProbability(pattern) {
-  if (pattern.probability === undefined || pattern.probability === null) return true;
-  const p = Number(pattern.probability);
-  if (!Number.isFinite(p)) return true;
-  if (p <= 0) return false;
-  if (p >= 1) return true;
-  return Math.random() < p;
-}
-
-function renderTemplate(template, context) {
-  if (typeof template === 'string') {
-    return template.replace(/\{\{(.*?)\}\}/g, (match, path) => {
-      const parts = path.trim().split('.');
-      let val = context;
-      for (const part of parts) {
-        val = val?.[part];
-      }
-      return val !== undefined ? val : match;
-    });
-  }
-  if (Array.isArray(template)) {
-    return template.map(item => renderTemplate(item, context));
-  }
-  if (typeof template === 'object' && template !== null) {
-    const rendered = {};
-    for (const key in template) {
-      rendered[key] = renderTemplate(template[key], context);
-    }
-    return rendered;
-  }
-  return template;
-}
-
-async function evaluateTriggers() {
-  const supabase = getSupabaseAdmin();
-  const batchSize = Number(process.env.OPS_EVENT_BATCH_SIZE || 25);
-  const reactionMatrix = await getPolicyValue('reaction_matrix', { patterns: [] });
-  const patterns = normalizeArray(reactionMatrix?.patterns);
-
-  if (patterns.length === 0) {
-    return { events: 0, queued: 0 };
-  }
-
-  const { data: events, error } = await supabase
+async function processEvents() {
+  const { data: events } = await supabase
     .from('ops_agent_events')
     .select('*')
     .is('processed_at', null)
     .order('created_at', { ascending: true })
-    .limit(batchSize);
+    .limit(5);
 
-  if (error) throw error;
-  if (!events || events.length === 0) return { events: 0, queued: 0 };
-
-  let queued = 0;
+  if (!events?.length) return;
 
   for (const event of events) {
-    let eventMatched = false;
+    try {
+        const matrix = await getPolicyValue('reaction_matrix');
+        const patterns = matrix?.patterns || [];
+        const pattern = patterns.find(p => {
+          try { return new Function('event', `return ${p.condition}`)(event); } catch (e) { return false; }
+        });
 
-    for (const pattern of patterns) {
-      if (!matchesPattern(event, pattern)) continue;
-      if (!passProbability(pattern)) continue;
-      if (await cooldownActive(supabase, pattern)) continue;
+        if (pattern) {
+          const { data: proposal } = await supabase
+            .from('ops_mission_proposals')
+            .insert({
+              source: 'trigger',
+              dedupe_key: `event:${event.id}`,
+              template: pattern.template,
+              status: 'approved'
+            })
+            .select()
+            .single();
 
-      const template = pattern.template ?? pattern.proposal;
-      if (!template) continue;
+          let activeProposal = proposal;
+          if (!activeProposal) {
+             const { data: existing } = await supabase.from('ops_mission_proposals').select('*').eq('dedupe_key', `event:${event.id}`).single();
+             activeProposal = existing;
+          }
 
-      // Render the template with event context
-      const renderedTemplate = renderTemplate(template, { event });
+          if (activeProposal) {
+              const { data: mission } = await supabase.from('ops_missions').insert({
+                  proposal_id: activeProposal.id,
+                  status: 'running',
+                  policy_snapshot: { event_data: event.data }
+                }).select().single();
 
-      const payload = {
-        pattern_id: pattern.id ?? null,
-        event_type: event.type,
-        proposal_template: renderedTemplate,
-        proposal_source: pattern.source ?? 'trigger',
-        dedupe_key: pattern.dedupe_key ?? (pattern.id ? `${event.id}:${pattern.id}` : event.id),
-      };
-
-      const { error: insertError } = await supabase
-        .from('ops_agent_reactions')
-        .insert({ event_id: event.id, status: 'queued', payload });
-
-      if (!insertError) {
-        queued += 1;
-        eventMatched = true;
-      }
-    }
-
-    // Only mark event as processed if it matched at least one pattern
-    if (eventMatched) {
-      await supabase
-        .from('ops_agent_events')
-        .update({ processed_at: new Date().toISOString() })
-        .eq('id', event.id);
+              if (mission) {
+                  await createStep(mission.id, pattern.template.steps[0], event.data);
+                  console.log(`[Heartbeat] Started Mission ${mission.id}`);
+              }
+          }
+        }
+        await supabase.from('ops_agent_events').update({ processed_at: new Date().toISOString() }).eq('id', event.id);
+    } catch (e) {
+        console.error("Event Error:", e);
     }
   }
-
-  return { events: events.length, queued };
 }
 
-async function processReactionQueue() {
-  const supabase = getSupabaseAdmin();
-  const batchSize = Number(process.env.OPS_REACTION_BATCH_SIZE || 25);
+async function processMissions() {
+  const { data: missions } = await supabase
+    .from('ops_missions')
+    .select('id, policy_snapshot, proposal_id')
+    .eq('status', 'running');
 
-  const { data: reactions, error } = await supabase
-    .from('ops_agent_reactions')
-    .select('*')
-    .eq('status', 'queued')
-    .order('created_at', { ascending: true })
-    .limit(batchSize);
+  if (!missions?.length) return;
 
-  if (error) throw error;
-  if (!reactions || reactions.length === 0) return { processed: 0, created: 0 };
+  for (const mission of missions) {
+    try {
+        const { data: proposal } = await supabase.from('ops_mission_proposals').select('template, dedupe_key').eq('id', mission.proposal_id).single();
+        if (!proposal) {
+          console.log(`[Heartbeat] Mission ${mission.id.slice(0,8)} has no proposal — marking failed`);
+          await supabase.from('ops_missions').update({ status: 'failed' }).eq('id', mission.id);
+          continue;
+        }
 
-  let created = 0;
+        const allSteps = proposal.template.steps;
+        const { data: steps } = await supabase.from('ops_mission_steps').select('id, status, kind').eq('mission_id', mission.id).order('created_at', { ascending: true });
 
-  for (const reaction of reactions) {
-    const payload = reaction.payload || {};
-    const template = payload.proposal_template;
-    if (!template) {
-      await supabase
-        .from('ops_agent_reactions')
-        .update({ status: 'failed', updated_at: new Date().toISOString() })
-        .eq('id', reaction.id);
-      continue;
+        const stepCount = steps?.length || 0;
+        const lastStep = stepCount > 0 ? steps[stepCount - 1] : null;
+
+        let eventData = mission.policy_snapshot?.event_data;
+        if (!eventData && proposal.dedupe_key?.startsWith('event:')) {
+            const eventId = proposal.dedupe_key.split(':')[1];
+            const { data: event } = await supabase.from('ops_agent_events').select('data').eq('id', eventId).single();
+            eventData = event?.data || {};
+        }
+
+        if (!lastStep) {
+            console.log(`[Heartbeat] Mission ${mission.id.slice(0,8)} has no steps. Creating Step 0.`);
+            await createStep(mission.id, allSteps[0], eventData);
+            continue;
+        }
+
+        if (lastStep.status === 'succeeded') {
+            const nextIndex = stepCount;
+            if (nextIndex < allSteps.length) {
+                console.log(`[Heartbeat] Mission ${mission.id.slice(0,8)}: Step ${stepCount - 1} succeeded → creating Step ${nextIndex}`);
+                await createStep(mission.id, allSteps[nextIndex], eventData);
+            } else {
+                console.log(`[Heartbeat] Mission ${mission.id.slice(0,8)} SUCCEEDED (all ${allSteps.length} steps done)`);
+                await supabase.from('ops_missions').update({ status: 'succeeded' }).eq('id', mission.id);
+            }
+        } else if (lastStep.status === 'failed') {
+            // CRITICAL FIX: Failed steps must cascade to mission failure
+            console.log(`[Heartbeat] Mission ${mission.id.slice(0,8)} FAILED (step ${stepCount - 1} "${lastStep.kind}" failed)`);
+            await supabase.from('ops_missions').update({ status: 'failed' }).eq('id', mission.id);
+        }
+        // If lastStep is 'queued' or 'running', do nothing — worker is handling it
+    } catch (e) {
+        console.error(`Error processing mission ${mission.id}:`, e);
     }
-
-    const { data, error: createError } = await supabase.rpc(
-      'ops_create_proposal_and_maybe_autoapprove',
-      {
-        p_dedupe_key: payload.dedupe_key ?? reaction.id,
-        p_source: payload.proposal_source ?? 'reaction',
-        p_template: template,
-      }
-    );
-
-    if (createError) {
-      await supabase
-        .from('ops_agent_reactions')
-        .update({ status: 'failed', payload: { ...payload, error: createError.message } })
-        .eq('id', reaction.id);
-      continue;
-    }
-
-    created += 1;
-    await supabase
-      .from('ops_agent_reactions')
-      .update({ status: 'done', payload: Object.assign({}, payload, { result: data?.[0] || null }) })
-      .eq('id', reaction.id);
   }
-
-  return { processed: reactions.length, created };
-}
-
-async function promoteInsights() {
-  return { promoted: 0 };
-}
-
-async function recoverExpiredLeases() {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.rpc('ops_recover_expired_leases');
-  if (error) throw error;
-  return data?.[0] || { requeued_steps: 0, failed_steps: 0 };
 }
 
 async function recoverStaleSteps() {
-  const supabase = getSupabaseAdmin();
-  const threshold = Number(process.env.OPS_STALE_STEP_MINUTES || 30);
-  const { data, error } = await supabase.rpc('ops_recover_stale_steps', {
-    p_threshold_minutes: threshold,
-  });
+    // Default 5 min (not 30) — fast recovery is critical for pipeline health
+    const staleMinutes = Number(process.env.OPS_STALE_STEP_MINUTES || 5);
+    const cutoff = new Date(Date.now() - staleMinutes * 60 * 1000).toISOString();
 
-  if (error) throw error;
-  return data?.[0]?.recovered_steps ?? 0;
+    const { data: staleSteps, error } = await supabase
+      .from('ops_mission_steps')
+      .select('id, mission_id, kind, executor')
+      .eq('status', 'running')
+      .lt('updated_at', cutoff);
+
+    if (error || !staleSteps?.length) return 0;
+
+    let failed = 0;
+
+    for (const step of staleSteps) {
+      const { error: updateError } = await supabase
+        .from('ops_mission_steps')
+        .update({
+          status: 'failed',
+          last_error: `Stale: no heartbeat for ${staleMinutes}+ minutes`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', step.id);
+
+      if (!updateError) {
+        failed++;
+        console.log(`[StaleRecovery] Failed step ${step.id.slice(0,8)} (${step.executor}) — stale ${staleMinutes}+ min`);
+        // Finalize the mission so it doesn't stay as zombie
+        await supabase.rpc('ops_maybe_finalize_mission', { p_mission_id: step.mission_id }).catch(() => {});
+      }
+    }
+
+    return failed;
+}
+
+async function createStep(missionId, stepTemplate, eventData) {
+  let paramsStr = JSON.stringify(stepTemplate.params);
+  if (eventData?.prompt) paramsStr = paramsStr.replace(/{{event\.data\.prompt}}/g, eventData.prompt.replace(/"/g, '\\"'));
+  if (eventData?.chat_id) paramsStr = paramsStr.replace(/{{event\.data\.chat_id}}/g, eventData.chat_id);
+
+  let params;
+  try {
+      params = JSON.parse(paramsStr);
+  } catch (e) {
+      console.error("JSON Parse Error:", e);
+      throw e;
+  }
+
+  const { error } = await supabase.from('ops_mission_steps').insert({
+      mission_id: missionId,
+      kind: stepTemplate.kind,
+      executor: stepTemplate.executor,
+      params: params,
+      status: 'queued'
+    });
+
+  if (error) {
+      console.error("Supabase Insert Error:", error);
+  } else {
+      console.log(`[CreateStep] Queued ${stepTemplate.kind} (${stepTemplate.executor}) for mission ${missionId.slice(0,8)}`);
+  }
 }
 
 async function main() {
-  const triggerResult = await evaluateTriggers();
-  const reactionResult = await processReactionQueue();
-  const leaseResult = await recoverExpiredLeases();
-  const staleResult = await recoverStaleSteps();
-
-  console.log(JSON.stringify({
-    ok: true,
-    triggerResult,
-    reactionResult,
-    leaseResult,
-    staleResult,
-  }));
+  console.log("❤️ Heartbeat v5.0 (Failed Step Cascade + Fast Stale Recovery) Started");
+  setInterval(async () => {
+    try {
+      await processEvents().catch(e => console.error("Event Error:", e));
+      await processMissions().catch(e => console.error("Mission Loop Error:", e));
+      const staleCount = await recoverStaleSteps().catch(() => 0);
+      if (staleCount > 0) console.log(`[Heartbeat] Recovered ${staleCount} stale step(s)`);
+    } catch (e) {
+      console.error("Heartbeat tick error:", e);
+    }
+  }, 2000);
 }
 
-main().catch((err) => {
-  console.error(err?.message || err);
-  process.exit(1);
-});
+main();

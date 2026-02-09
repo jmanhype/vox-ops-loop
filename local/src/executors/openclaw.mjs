@@ -20,11 +20,11 @@ function validateArgs(args) {
     if (arg.includes('\u0000')) {
       throw new Error('Invalid null byte in argument');
     }
-    if (arg.length > 512) {
+    if (arg.length > 8192) {
       throw new Error('Argument too long');
     }
     total += arg.length;
-    if (total > 4096) {
+    if (total > 32768) {
       throw new Error('Arguments too large');
     }
     sanitized.push(arg);
@@ -135,7 +135,7 @@ export async function runOpenClaw(step) {
       reject(err);
     });
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timeout);
 
       if (timedOut) {
@@ -147,13 +147,15 @@ export async function runOpenClaw(step) {
         return;
       }
 
-      if (code === 0) {
+      if (code === 0 && !signal) {
         resolve({ ok: true, stdout, stderr, subcommand, args: safeArgs });
       } else {
-        const err = new Error(`OpenClaw exited with code ${code}`);
+        const exitCode = typeof code === 'number' ? code : 1;
+        const reason = signal ? `killed by ${signal}` : `code ${exitCode}`;
+        const err = new Error(`OpenClaw failed (${reason})`);
         err.stdout = stdout;
         err.stderr = stderr;
-        err.code = code;
+        err.code = exitCode;
         reject(err);
       }
     });

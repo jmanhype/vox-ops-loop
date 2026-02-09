@@ -3,9 +3,19 @@ import { runOpenClaw } from './openclaw.mjs';
 import { runRadar } from './radar.mjs';
 import { runMinion } from './minion.mjs';
 import { runVote } from './vote.mjs';
+import { runNotify } from './notify.mjs';
+import voxlogs from './voxlogs.mjs';
 
-export async function executeStep(step) {
+export async function executeStep(step, context) {
   const executor = step.executor || 'openclaw';
+
+  if (executor === 'voxlogs') {
+    return await voxlogs(step.params || {}, context);
+  }
+
+  if (step.kind === 'notify' || executor === 'notify') {
+    return await runNotify(step);
+  }
 
   if (step.kind === 'vote' || executor === 'vote') {
     return await runVote(step);

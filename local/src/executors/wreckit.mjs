@@ -1,86 +1,64 @@
+
 import { spawn } from 'child_process';
-import path from 'path';
 
-const ALLOWED_COMMANDS = new Set([
-  'status',
-  'list',
-  'show',
-  'run',
-  'next',
-  'ideas',
-  'doctor',
-  'rollback',
-  'init',
-  'research',
-  'plan',
-  'implement',
-  'pr',
-  'complete'
-]);
+const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
-function buildArgs(step) {
+export async function runWreckit(step) {
   const params = step.params || {};
-  const command = params.command;
+  const command = params.command || 'status';
+  const args = params.args || [];
 
-  if (!command || !ALLOWED_COMMANDS.has(command)) {
-    throw new Error(`Invalid or missing Wreckit command: ${command || 'none'}`);
-  }
+  // Construct arguments for run-wreckit.mjs
+  // Usage: node run-wreckit.mjs --command <cmd> [args...]
 
-  const wrapper = process.env.WRECKIT_WRAPPER
-    || '/Users/speed/.openclaw/workspace/wreckit/scripts/run-wreckit.mjs';
+  const scriptPath = '/Users/speed/.openclaw/workspace/wreckit/scripts/run-wreckit.mjs';
+  const finalArgs = ['run', scriptPath, '--command', command, ...args];
 
-  const args = [wrapper, '--command', command];
+  if (params.cwd) finalArgs.push('--cwd', params.cwd);
+  if (params.item) finalArgs.push('--id', params.item); // map item -> id
 
-  // Always enable verbose for better observability in autonomous mode
-  args.push('--verbose');
-
-  if (params.id) args.push('--id', String(params.id));
-  if (params.cwd) args.push('--cwd', String(params.cwd));
-  if (params.parallel) args.push('--parallel', String(params.parallel));
-  if (params.verbose) args.push('--verbose');
-  if (params.dry_run) args.push('--dry-run');
-  if (params.max_items) args.push('--max-items', String(params.max_items));
-  if (params.force) args.push('--force');
-
-  return { wrapper, args };
-}
-
-export function runWreckit(step) {
-  const { wrapper, args } = buildArgs(step);
-  const nodePath = process.env.NODE_BIN || 'node';
-  const cwd = step.params?.cwd ? String(step.params.cwd) : undefined;
+  const timeoutMs = Number(process.env.WRECKIT_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
+  console.log(`[Wreckit Executor] Running: bun ${finalArgs.join(' ')} (timeout: ${Math.round(timeoutMs / 1000)}s)`);
 
   return new Promise((resolve, reject) => {
-    const child = spawn(nodePath, args, {
-      cwd,
-      stdio: ['ignore', 'pipe', 'pipe']
+    const child = spawn('bun', finalArgs, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+          ...process.env,
+          ANTHROPIC_API_KEY: process.env.ZAI_API_KEY || process.env.OPENAI_API_KEY,
+          ANTHROPIC_BASE_URL: 'https://open.bigmodel.cn/api/paas/v4',
+          ZAI_API_KEY: process.env.ZAI_API_KEY
+      }
     });
+
+    // Watchdog: kill hung child after timeout
+    const watchdog = setTimeout(() => {
+      console.error(`[Wreckit Executor] Timeout after ${Math.round(timeoutMs / 1000)}s — killing child`);
+      child.kill('SIGTERM');
+      setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 5000);
+    }, timeoutMs);
 
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (chunk) => {
-      const s = chunk.toString();
-      stdout += s;
-      process.stdout.write(s); // LIVE STREAM
+    child.stdout.on('data', (chunk) => stdout += chunk.toString());
+    child.stderr.on('data', (chunk) => stderr += chunk.toString());
+
+    child.on('error', (err) => {
+      clearTimeout(watchdog);
+      reject(err);
     });
 
-    child.stderr.on('data', (chunk) => {
-      const s = chunk.toString();
-      stderr += s;
-      process.stderr.write(s); // LIVE STREAM
-    });
-
-    child.on('error', (err) => reject(err));
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve({ ok: true, stdout, stderr, wrapper });
+    child.on('close', (code, signal) => {
+      clearTimeout(watchdog);
+      if (code === 0 && !signal) {
+        resolve({ ok: true, stdout, stderr });
       } else {
-        const err = new Error(`Wreckit exited with code ${code}`);
+        const exitCode = typeof code === 'number' ? code : 1;
+        const reason = signal ? `killed by ${signal}` : `code ${exitCode}`;
+        const err = new Error(`Wreckit command failed (${reason})`);
         err.stdout = stdout;
         err.stderr = stderr;
-        err.code = code;
         reject(err);
       }
     });
